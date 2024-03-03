@@ -1,4 +1,4 @@
-CFLAGS = -fsanitize=address -Og -g -Wall -Werror -mbmi -mbmi2
+CFLAGS = -fsanitize=address -Og -g -Wall -Werror -std=c11
 CC = gcc
 
 all: mlpt

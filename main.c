@@ -1,14 +1,13 @@
 //
 // Created by sebastian-f on 3/1/24.
 //
+#define _XOPEN_SOURCE 700
 #include "mlpt.h"
 #include "config.h"
 #include "util.h"
-#include <stdalign.h>
 #include <math.h>
 #include <stdlib.h>
 #include <time.h>
-//[LEVELS][ENTRY_AMOUNT];
 
 #ifndef DEBUG
 #define DEBUG 0

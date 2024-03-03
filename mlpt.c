@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE 700
 //
 // Created by sebastian-f on 3/1/24.
 #include "config.h"
