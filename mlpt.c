@@ -32,7 +32,12 @@ size_t gen_mask(const uint_fast8_t size) {
 #define SEGMENT_SIZE (POBITS - LOG2_PTE_SIZE)
 #define RELEVANT_BITS (SEGMENT_SIZE * LEVELS + POBITS)
 
-size_t translate(size_t va) {
+typedef struct separated_va{
+    size_t vpn_segments[LEVELS];
+    size_t offset;
+} separated_va;
+
+separated_va separate(size_t va){
     va &= gen_mask(RELEVANT_BITS);
     if (DEBUG) {
         printBits("Full Address", &va);
@@ -53,14 +58,24 @@ size_t translate(size_t va) {
             printBits(n, vpn_segments + i);
         }
     }
+}
+
+size_t translate(size_t va) {
+    separated_va sep_va = separate(va);
     size_t* page_address = (size_t*) ptbr; //interpret ptbr as a pointer
     for (int i  = 0; i < LEVELS; i += 1) {
-        size_t pte = page_address[vpn_segments[i]];
+        if (!page_address){ //if page address is invalid
+            return ~0;
+        }
+        if (DEBUG) {
+            printBits("segment", &(sep_va.vpn_segments[i]));
+        }
+        size_t pte = page_address[sep_va.vpn_segments[i]];
         if (DEBUG) {
             printBits("PTE", &pte);
         }
-        if (pte & 1) { //if the entry is valid
-            page_address = (size_t*) (pte >> POBITS);
+        if (pte & 1) { //if the entry is valid, wipe away lower bits
+            page_address = (size_t*) (pte >> POBITS << POBITS);
             if (DEBUG) {
                 size_t addr = (size_t) page_address;
                 printBits("Page Address", &addr);
@@ -70,6 +85,11 @@ size_t translate(size_t va) {
             return ~0;
         }
     }
-    return ((size_t) page_address << POBITS) + offset;
+    return (size_t) page_address + sep_va.offset;
 }
 
+void page_allocate(size_t va){
+    separated_va sep_va = separate(va);
+    size_t* page_address = (size_t*) ptbr; //interpret ptbr as a pointer
+    
+}

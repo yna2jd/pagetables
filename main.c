@@ -38,6 +38,13 @@ size_t manually_allocate(size_t* page_tables[LEVELS], size_t * vpn_segments, con
     }
     size_t address = 0;
     for (int i = 0; i < LEVELS; i++) {
+        if (DEBUG) {
+            char n[10];
+            snprintf(n, 15, "Table Addr %d", i);
+            printBits(n, (size_t *) &page_tables[i]);
+        }
+    }
+    for (int i = 0; i < LEVELS; i++) {
         address += ((size_t) vpn_segments[i] << LEVEL(i));
         if (DEBUG) {
             char n[10];
@@ -46,10 +53,15 @@ size_t manually_allocate(size_t* page_tables[LEVELS], size_t * vpn_segments, con
             printBits("Val", &address);
         }
         if (i + 1 < LEVELS) { //vpn to vpn
-            page_tables[i][vpn_segments[i]] = ((size_t) &page_tables[i + 1][0] << POBITS) + 0b1;
+            page_tables[i][vpn_segments[i]] = (size_t) &page_tables[i + 1][0] + 0b1;
         }
         else{ //physical address
-            page_tables[i][vpn_segments[i]] = ((size_t) PHYSICAL_ADDRESS << POBITS) + 0b1;
+            page_tables[i][vpn_segments[i]] = (size_t) PHYSICAL_ADDRESS + 0b1; //we don't need to shift it pobits because it is aligned
+        }
+        if (DEBUG) {
+            char n[10];
+            snprintf(n, 10, "Table %d", i);
+            printBits(n, &page_tables[i][vpn_segments[i]]);
         }
     }
     address += offset;
@@ -69,13 +81,14 @@ int main() {
     int successful_tests = 0;
     for (int test = 0; test < TESTS; test++) {
         setup_page_tables(page_tables);
-        size_t PHYSICAL_ADDRESS = random() % ENTRY_AMOUNT;
+        size_t PHYSICAL_ADDRESS = (random() % ENTRY_AMOUNT) << POBITS;
         size_t OFFSET = random() % (size_t) pow(2, POBITS);
         size_t address = manually_allocate(page_tables, vpn_segments, PHYSICAL_ADDRESS, OFFSET);
         ptbr = (size_t) &page_tables[0][0];
         if (DEBUG) {
             printf("\n");
             printBits("Input", &address);
+            printBits("Base register", &ptbr);
         }
         size_t out = translate(address);
         if (DEBUG) {
@@ -84,7 +97,7 @@ int main() {
         for (int i = 0; i < LEVELS; i += 1) {
             free(page_tables[i]);
         }
-        size_t actual_address = (PHYSICAL_ADDRESS << POBITS) + OFFSET;
+        size_t actual_address = PHYSICAL_ADDRESS + OFFSET;
         if (out == actual_address) {
             successful_tests += 1;
         } else {
