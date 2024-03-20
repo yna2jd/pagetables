@@ -8,7 +8,7 @@ void _printBits_internal(char const* label, size_t const * const ptr, bool only_
     unsigned char byte;
     int i, j;
     int on = 0;
-    size_t size = sizeof (size_t) / sizeof (byte);
+    size_t size = 8 / sizeof (byte);
     for (i = size-1; i >= 0; i--) {
         if (!only_value || on) {
             printf(" ");
@@ -34,6 +34,7 @@ void _printBits_internal(char const* label, size_t const * const ptr, bool only_
         printf(" : %s ", label);
         printf(": 0x%04lx\n", *ptr);
     }
+    fflush(0);
 }
 
 void printBits(char const* label, size_t const * const ptr) {

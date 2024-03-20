@@ -7,4 +7,5 @@
 #include <stdio.h>
 void printBits(char const* label, size_t const * const ptr);
 void putBits(size_t const* const ptr);
+
 #endif //CSO2_UTIL_H

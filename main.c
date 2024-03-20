@@ -15,17 +15,18 @@
 
 #define LEVEL(n) ((POBITS-3) * (LEVELS - n - 1) + POBITS)
 #define ENTRY_AMOUNT (int) pow(2, POBITS-3)
-#define TESTS 3
+#define TESTS 4
+#define TRANSLATE_TEST 0
+
+#define PAGE_BYTES (int) pow(2, POBITS)
 
 void setup_page_tables(size_t* page_tables[LEVELS]){
     for (int i = 0; i < LEVELS; i += 1){
         void* ptr;
-        int memalign_error = posix_memalign( &ptr, 4096,  ENTRY_AMOUNT * sizeof (size_t));
+        int memalign_error = posix_memalign( &ptr, PAGE_BYTES,  ENTRY_AMOUNT * sizeof (size_t));
         page_tables[i] = (size_t*) ptr; //an array of size ENTRY_AMOUNT
         if (memalign_error != 0){
-            char n[40];
-            snprintf(n, 40, "Memalign Error with Input %d. Quitting", i);
-            printf("%s", n);
+            printf("Memalign Error with Input %d. Quitting", i);
             _exit(1);
         }
     }
@@ -37,9 +38,10 @@ size_t manually_allocate(size_t* page_tables[LEVELS], size_t * vpn_segments, con
         _exit(1);
     }
     size_t address = 0;
-    for (int i = 0; i < LEVELS; i++) {
-        if (DEBUG) {
-            char n[10];
+
+    if (DEBUG) {
+        for (int i = 0; i < LEVELS; i++) {
+            char n[15];
             snprintf(n, 15, "Table Addr %d", i);
             printBits(n, (size_t *) &page_tables[i]);
         }
@@ -77,35 +79,82 @@ int main() {
     for (int i = 0; i < LEVELS; i += 1) {
         vpn_segments[i] = random() % ENTRY_AMOUNT;
     }
+    vpn_segments[0] = 1;
+    vpn_segments[1] = 0;
+    vpn_segments[2] = 511;
     size_t* page_tables[LEVELS];
     int successful_tests = 0;
     for (int test = 0; test < TESTS; test++) {
-        setup_page_tables(page_tables);
+        printf("Begin test %d\n", test);
+
         size_t PHYSICAL_ADDRESS = (random() % ENTRY_AMOUNT) << POBITS;
         size_t OFFSET = random() % (size_t) pow(2, POBITS);
-        size_t address = manually_allocate(page_tables, vpn_segments, PHYSICAL_ADDRESS, OFFSET);
-        ptbr = (size_t) &page_tables[0][0];
+        size_t address = 0;
+        if(!TRANSLATE_TEST) {
+            setup_page_tables(page_tables);
+            address = manually_allocate(page_tables, vpn_segments, PHYSICAL_ADDRESS, OFFSET);
+            ptbr = (size_t) &page_tables[0][0];
+        }
+        {
+            ptbr = 0;
+            int memalign_error = posix_memalign((void**)&ptbr, PAGE_BYTES, PAGE_BYTES);
+            if (memalign_error != 0) {
+                printf("Memalign Error during allocate of main. Quitting");
+                _exit(1);
+            }
+            address = 0;
+            for (int i = 0; i < LEVELS; i += 1) {
+                address += ((size_t) vpn_segments[i] << LEVEL(i));
+            }
+            address += OFFSET;
+        }
+
+
         if (DEBUG) {
             printf("\n");
             printBits("Input", &address);
             printBits("Base register", &ptbr);
         }
-        size_t out = translate(address);
-        if (DEBUG) {
-            printBits("Output", &out);
-        }
-        for (int i = 0; i < LEVELS; i += 1) {
-            free(page_tables[i]);
-        }
-        size_t actual_address = PHYSICAL_ADDRESS + OFFSET;
-        if (out == actual_address) {
+        if(TRANSLATE_TEST){
+            size_t out = translate(address);
+            if (DEBUG) {
+                printBits("Output", &out);
+            }
+            size_t actual_address = PHYSICAL_ADDRESS + OFFSET;
+            if (out == actual_address) {
+                successful_tests += 1;
+            }
+            else {
+                printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
+                printBits("received address: ", &out);
+                printBits("expected address: ", &actual_address);
+                _exit(1);
+            }
+            for (int i = 0; i < LEVELS; i += 1) {
+                free(page_tables[i]);
+            }
+        }else{
+            size_t out;
+            out = translate(address);
+            if(out != (size_t) ~0){
+                printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
+                printBits("Instead of ~0, received address ", &out);
+                _exit(1);
+            }
+            page_allocate(address);
+            out = translate(address);
+            if(out == (size_t) ~0){
+                printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
+                printBits("Received ~0 as output for address", &address);
+                _exit(1);
+            }
+            printf("\n");
+            printBits("Physical address", &out);
             successful_tests += 1;
-        } else {
-            printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
-            printBits("received address: ", &out);
-            printBits("expected address: ", &actual_address);
-            _exit(1);
         }
+
+        printf("Ended test %d\n", test);
     }
+    printf("Page Size: %d bytes\n", PAGE_BYTES);
     printf("%d Levels and %d page offset bits:\n\t%d/%d passed\n", LEVELS, POBITS, successful_tests, TESTS);
 }
