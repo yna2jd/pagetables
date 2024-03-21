@@ -1,14 +1,12 @@
-#define _XOPEN_SOURCE 700
+
 //
 // Created by sebastian-f on 3/1/24.
 #include "config.h"
 #include "mlpt.h"
-
 #include <stdlib.h>
 #include <inttypes.h>
 #include <unistd.h>
 #include <stdio.h>
-#include <math.h>
 #include <string.h>
 #ifdef DEBUG
     #include "util.h"
@@ -24,15 +22,22 @@ size_t gen_mask(const uint_fast8_t size) {
     return (src - 1) ^ src;
 }
 
-#define PTE_SIZE 8 //page table entries are 8 bytes. This is constant. Defined at 6.3.4
-#define ENTRY_AMT PAGE_SIZE / PTE_SIZE
-#define LOG2_PTE_SIZE 3
-// the size of each vpn segment is determined by taking log2 of 2^POBITS over the PTE_SIZE (2^3),
-// thus, log2(2^(POBITS-LOG2_PTE_SIZE))
-#define SEGMENT_SIZE (POBITS - LOG2_PTE_SIZE) // see 2.4 of deliverable
-#define RELEVANT_BITS (SEGMENT_SIZE * LEVELS + POBITS) // see 2.4 of deliverable
-#define PAGE_BYTES (int) pow(2, POBITS)
-#define ENTRY_AMOUNT (int) pow(2, SEGMENT_SIZE)
+
+typedef struct allocated_pages_struct{
+    void** stack;
+    int stack_top;
+    int stack_size;
+} allocated_pages_struct;
+
+#define NULLPTR 0
+
+allocated_pages_struct allocated_pages = {NULLPTR, -1, 128};
+
+void init_allocated_pages_struct(){
+    allocated_pages.stack_size = 128;
+    allocated_pages.stack_top = -1;
+    allocated_pages.stack = NULLPTR;
+}
 
 typedef struct separated_va{
     size_t vpn_segments[LEVELS];
@@ -51,7 +56,7 @@ separated_va separate(size_t va){
     size_t vpn = va >> POBITS;
     sep_va.offset = va & gen_mask(POBITS);
     if (DEBUG) {
-        printBits("Offset", &(sep_va.offset));
+        printBits("Offset", &(sep_va.offset)); // printBits is not included in this file
     }
     size_t segment_mask = gen_mask(SEGMENT_SIZE);
     for (int i = 0; i < LEVELS; i += 1){
@@ -99,6 +104,30 @@ size_t translate(size_t va) {
     return (size_t) page_address + sep_va.offset;
 }
 
+void allocate(void** mem_ptr){
+    int memalign_error = posix_memalign(&(*mem_ptr), PAGE_BYTES, PAGE_BYTES);
+    if (memalign_error != 0) {
+        printf("Memalign Error during ptr allocate. Quitting");
+        _exit(1);
+    }
+    memset(*mem_ptr, 0, PAGE_BYTES);
+    if (allocated_pages.stack == 0){
+        init_allocated_pages_struct();
+        allocated_pages.stack = malloc(allocated_pages.stack_size * sizeof(size_t)); //setup stack memory
+    }
+    if (allocated_pages.stack_top + 1 >= allocated_pages.stack_size){ //double the size of the stack
+        allocated_pages.stack_size *= 2;
+        void** tmp = realloc(allocated_pages.stack, allocated_pages.stack_size * sizeof(size_t));
+        if(tmp == 0){
+            printf("Reallocation Error during ptr reallocation. Quitting");
+            _exit(1);
+        }
+        allocated_pages.stack = tmp;
+    }
+    allocated_pages.stack_top += 1;
+    allocated_pages.stack[allocated_pages.stack_top] = *mem_ptr;
+}
+
 void page_allocate(size_t va){
     separated_va sep_va = separate(va);
     if (DEBUG) {
@@ -106,12 +135,7 @@ void page_allocate(size_t va){
     }
     void* mem_ptr = 0;
     if (ptbr == 0) {
-        int memalign_error = posix_memalign(&mem_ptr, PAGE_BYTES, PAGE_BYTES);
-        if (memalign_error != 0) {
-            printf("Memalign Error during ptr allocate. Quitting");
-            _exit(1);
-        }
-        memset(mem_ptr, 0, PAGE_BYTES);
+        allocate(&mem_ptr);
         if (DEBUG) {
             printf("\tAllocated ptbr page\n");
         }
@@ -133,12 +157,7 @@ void page_allocate(size_t va){
         }
         if ((*pte_ptr & 1) == 0){ //is invalid pte
             mem_ptr = 0;
-            int memalign_error = posix_memalign(&mem_ptr, PAGE_BYTES, PAGE_BYTES);
-            if (memalign_error != 0) {
-                printf("Memalign Error during allocate of level %d. Quitting", i);
-                _exit(1);
-            }
-            memset(mem_ptr, 0, PAGE_BYTES);
+            allocate(&mem_ptr);
             if (DEBUG) {
                 char n[30];
                 snprintf(n, 30, "Allocated memory ptr for %d", i);
@@ -157,4 +176,18 @@ void page_allocate(size_t va){
         }
     }
 
+}
+
+void deallocate_mlpt_allocated_pages(){
+    if (allocated_pages.stack == 0){
+        if(DEBUG){
+            printf("Warning: deallocated nothing (no allocated pages detected");
+        }
+        return;
+    }
+    for (int i = 0; i <= allocated_pages.stack_top; i += 1){
+        free(allocated_pages.stack[i]);
+    }
+    free(allocated_pages.stack);
+    init_allocated_pages_struct();
 }

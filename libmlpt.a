@@ -1,0 +1,505 @@
+!<arch>
+mlpt.c/         0           0     0     644     5817      `
+
+//
+// Created by sebastian-f on 3/1/24.
+#include "config.h"
+#include "mlpt.h"
+#include <stdlib.h>
+#include <inttypes.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <string.h>
+#ifdef DEBUG
+    #include "util.h"
+#endif
+#ifndef DEBUG
+#define DEBUG 0
+void printBits(char const* label, size_t const * const ptr);
+#endif
+size_t ptbr = 0;
+//Modified from https://stackoverflow.com/questions/12416639/how-to-create-a-mask-with-the-least-significant-bits-set-to-1-in-c
+size_t gen_mask(const uint_fast8_t size) {
+    const size_t src = (size_t) 1  << (size - 1);
+    return (src - 1) ^ src;
+}
+
+
+typedef struct allocated_pages_struct{
+    void** stack;
+    int stack_top;
+    int stack_size;
+} allocated_pages_struct;
+
+#define NULLPTR 0
+
+allocated_pages_struct allocated_pages = {NULLPTR, -1, 128};
+
+void init_allocated_pages_struct(){
+    allocated_pages.stack_size = 128;
+    allocated_pages.stack_top = -1;
+    allocated_pages.stack = NULLPTR;
+}
+
+typedef struct separated_va{
+    size_t vpn_segments[LEVELS];
+    size_t offset;
+} separated_va;
+
+separated_va separate(size_t va){
+    if (DEBUG) {
+        printf("\n\tBegin separate\n");
+    }
+    separated_va sep_va;
+    va &= gen_mask(RELEVANT_BITS);
+    if (DEBUG) {
+        printBits("Full Address", &va);
+    }
+    size_t vpn = va >> POBITS;
+    sep_va.offset = va & gen_mask(POBITS);
+    if (DEBUG) {
+        printBits("Offset", &(sep_va.offset)); // printBits is not included in this file
+    }
+    size_t segment_mask = gen_mask(SEGMENT_SIZE);
+    for (int i = 0; i < LEVELS; i += 1){
+        int shift =  (LEVELS - i - 1) * SEGMENT_SIZE;
+        sep_va.vpn_segments[i] = (vpn >> shift) & segment_mask;
+        if (DEBUG) {
+            char n[10];
+            snprintf(n, 10, "Segment %d", i);
+            printBits(n, sep_va.vpn_segments + i);
+        }
+    }
+    return sep_va;
+}
+
+size_t translate(size_t va) {
+    separated_va sep_va = separate(va);
+    if (DEBUG) {
+        printf("\n\tBegin translate\n");
+    }
+    size_t* page_address = (size_t*) ptbr; //interpret ptbr as a pointer
+    for (int i  = 0; i < LEVELS; i += 1) {
+        if (!page_address){ //if page address is invalid
+            return ~0;
+        }
+        if (DEBUG) {
+            char n[25];
+            snprintf(n, 25, "Segment Level %d", i);
+            printBits(n, &(sep_va.vpn_segments[i]));
+        }
+        size_t pte = page_address[sep_va.vpn_segments[i]];
+        if (DEBUG) {
+            printBits("PTE", &pte);
+        }
+        if (pte & 1) { //if the entry is valid, wipe away lower bits
+            page_address = (size_t*) (pte >> POBITS << POBITS);
+            if (DEBUG) {
+                size_t addr = (size_t) page_address;
+                printBits("Page Address", &addr);
+            }
+        }
+        else {
+            return ~0;
+        }
+    }
+    return (size_t) page_address + sep_va.offset;
+}
+
+void allocate(void** mem_ptr){
+    int memalign_error = posix_memalign(&(*mem_ptr), PAGE_BYTES, PAGE_BYTES);
+    if (memalign_error != 0) {
+        printf("Memalign Error during ptr allocate. Quitting");
+        _exit(1);
+    }
+    memset(*mem_ptr, 0, PAGE_BYTES);
+    if (allocated_pages.stack == 0){
+        init_allocated_pages_struct();
+        allocated_pages.stack = malloc(allocated_pages.stack_size * sizeof(size_t)); //setup stack memory
+    }
+    if (allocated_pages.stack_top + 1 >= allocated_pages.stack_size){ //double the size of the stack
+        allocated_pages.stack_size *= 2;
+        void** tmp = realloc(allocated_pages.stack, allocated_pages.stack_size * sizeof(size_t));
+        if(tmp == 0){
+            printf("Reallocation Error during ptr reallocation. Quitting");
+            _exit(1);
+        }
+        allocated_pages.stack = tmp;
+    }
+    allocated_pages.stack_top += 1;
+    allocated_pages.stack[allocated_pages.stack_top] = *mem_ptr;
+}
+
+void page_allocate(size_t va){
+    separated_va sep_va = separate(va);
+    if (DEBUG) {
+        printf("\n\tBegin page allocate\n");
+    }
+    void* mem_ptr = 0;
+    if (ptbr == 0) {
+        allocate(&mem_ptr);
+        if (DEBUG) {
+            printf("\tAllocated ptbr page\n");
+        }
+        ptbr = (size_t) mem_ptr;
+    }
+    size_t* page_address = (size_t*) ptbr; //interpret ptbr as a pointer
+    size_t* pte_ptr = 0; //stores the pointer to the last pte
+    for (int i = 0; i < LEVELS; i += 1){
+        if (DEBUG) {
+            char n[25];
+            snprintf(n, 25, "Segment Level %d", i);
+            printBits(n, &(sep_va.vpn_segments[i]));
+        }
+        pte_ptr = page_address + sep_va.vpn_segments[i];
+        if (DEBUG) {
+            printBits("PTE value before write", pte_ptr);
+            size_t* pte_ptr_address = (size_t*) &pte_ptr;
+            printBits("PTE addr", pte_ptr_address);
+        }
+        if ((*pte_ptr & 1) == 0){ //is invalid pte
+            mem_ptr = 0;
+            allocate(&mem_ptr);
+            if (DEBUG) {
+                char n[30];
+                snprintf(n, 30, "Allocated memory ptr for %d", i);
+                printBits(n, (size_t*) &mem_ptr);
+            }
+            *pte_ptr = (size_t) mem_ptr + 0b1;
+            page_address = (size_t*) mem_ptr;
+            if (DEBUG) {
+                printBits("PTE updated with", pte_ptr);
+            }
+        }else{
+            page_address = (size_t*) (*pte_ptr & ~gen_mask(POBITS));
+            if (DEBUG) {
+                printBits("existing PTE accessed at", pte_ptr);
+            }
+        }
+    }
+
+}
+
+void deallocate_mlpt_allocated_pages(){
+    if (allocated_pages.stack == 0){
+        if(DEBUG){
+            printf("Warning: deallocated nothing (no allocated pages detected");
+        }
+        return;
+    }
+    for (int i = 0; i <= allocated_pages.stack_top; i += 1){
+        free(allocated_pages.stack[i]);
+    }
+    free(allocated_pages.stack);
+    init_allocated_pages_struct();
+}
+test.c/         0           0     0     644     5367      `
+//
+// Created by sebastian-f on 3/1/24.
+//
+#define _XOPEN_SOURCE 700
+#include "mlpt.h"
+#include "config.h"
+#include "util.h"
+#include "test.h"
+
+#ifndef DEBUG
+#define DEBUG 0
+#endif
+
+#define LEVEL(n) ((POBITS-3) * (LEVELS - n - 1) + POBITS)
+
+void setup_page_tables(size_t* page_tables[LEVELS]){
+    for (int i = 0; i < LEVELS; i += 1){
+        void* ptr;
+        int memalign_error = posix_memalign( &ptr, PAGE_BYTES,  ENTRY_AMOUNT * sizeof (size_t));
+        page_tables[i] = (size_t*) ptr; //an array of size ENTRY_AMOUNT
+        if (memalign_error != 0){
+            printf("Memalign Error with Input %d. Quitting", i);
+            _exit(1);
+        }
+    }
+}
+
+size_t manually_allocate(size_t* page_tables[LEVELS], size_t * vpn_segments, const size_t PHYSICAL_ADDRESS, size_t offset){
+    if (*page_tables == 0){
+        printf("Error: Page tables must be set up before allocating!");
+        _exit(1);
+    }
+    size_t address = 0;
+
+    if (DEBUG) {
+        for (int i = 0; i < LEVELS; i++) {
+            char n[15];
+            snprintf(n, 15, "Table Addr %d", i);
+            printBits(n, (size_t *) &page_tables[i]);
+        }
+    }
+    for (int i = 0; i < LEVELS; i++) {
+        address += ((size_t) vpn_segments[i] << LEVEL(i));
+        if (DEBUG) {
+            char n[10];
+            snprintf(n, 10, "Input %d", i);
+            printBits(n, &vpn_segments[i]);
+            printBits("Val", &address);
+        }
+        if (i + 1 < LEVELS) { //vpn to vpn
+            page_tables[i][vpn_segments[i]] = (size_t) &page_tables[i + 1][0] + 0b1;
+        }
+        else{ //physical address
+            page_tables[i][vpn_segments[i]] = (size_t) PHYSICAL_ADDRESS + 0b1; //we don't need to shift it pobits because it is aligned
+        }
+        if (DEBUG) {
+            char n[10];
+            snprintf(n, 10, "Table %d", i);
+            printBits(n, &page_tables[i][vpn_segments[i]]);
+        }
+    }
+    address += offset;
+    if(DEBUG) {
+        printBits("Offset", &offset);
+    }
+    return address;
+}
+
+void test(int test_version) {
+    srandom(time(NULL));
+    size_t vpn_segments[LEVELS];
+    for (int i = 0; i < LEVELS; i += 1) {
+        vpn_segments[i] = random() % ENTRY_AMOUNT;
+    }
+    size_t* page_tables[LEVELS];
+    int successful_tests = 0;
+    for (int test = 0; test < TESTS; test++) {
+        if (DEBUG) {
+            printf("Begin test %d\n", test);
+        }
+        size_t PHYSICAL_ADDRESS = (random() % ENTRY_AMOUNT) << POBITS;
+        size_t OFFSET = random() % (size_t) pow(2, POBITS);
+        size_t address = 0;
+        if(test_version == 0) {
+            setup_page_tables(page_tables);
+            address = manually_allocate(page_tables, vpn_segments, PHYSICAL_ADDRESS, OFFSET);
+            ptbr = (size_t) &page_tables[0][0];
+        }
+        else if (test_version == 1){
+            ptbr = 0;
+            int memalign_error = posix_memalign((void**)&ptbr, PAGE_BYTES, PAGE_BYTES);
+            if (memalign_error != 0) {
+                printf("Memalign Error during allocate of main. Quitting");
+                _exit(1);
+            }
+            address = 0;
+            for (int i = 0; i < LEVELS; i += 1) {
+                address += ((size_t) vpn_segments[i] << LEVEL(i));
+            }
+            address += OFFSET;
+        }
+
+
+        if (DEBUG) {
+            printf("\n");
+            printBits("Input", &address);
+            printBits("Base register", &ptbr);
+        }
+        if(test_version == 0){
+            size_t out = translate(address);
+            if (DEBUG) {
+                printBits("Output", &out);
+            }
+            size_t actual_address = PHYSICAL_ADDRESS + OFFSET;
+            if (out == actual_address) {
+                successful_tests += 1;
+            }
+            else {
+                printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
+                printBits("received address: ", &out);
+                printBits("expected address: ", &actual_address);
+                _exit(1);
+            }
+            for (int i = 0; i < LEVELS; i += 1) {
+                free(page_tables[i]);
+            }
+        }else if(test_version == 1){
+            size_t out;
+            out = translate(address);
+            if(out != (size_t) ~0){
+                printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
+                printBits("Instead of ~0, received address ", &out);
+                _exit(1);
+            }
+            page_allocate(address);
+            out = translate(address);
+            if(out == (size_t) ~0){
+                printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
+                printBits("Received ~0 as output for address", &address);
+                _exit(1);
+            }
+            if (DEBUG) {
+                printf("\n");
+                printBits("Physical address", &out);
+            }
+            successful_tests += 1;
+            free((size_t*) ptbr);
+            deallocate_mlpt_allocated_pages();
+        }
+        if (DEBUG) {
+            printf("Ended test %d\n", test);
+        }
+    }
+    if (DEBUG) {
+        printf("\nPage Size: %d bytes\n", PAGE_BYTES);
+    }
+    printf("Ran Test #%d with %d Levels and %d page offset bits:\n\t%d/%d passed\n\n", test_version, LEVELS, POBITS, successful_tests, TESTS);
+}
+
+
+// suggested usage:
+// int main(){
+//     test(0);
+//     test(1);
+// }
+util.c/         0           0     0     644     1251      `
+//
+// Created by sebastian-f on 3/1/24.
+//
+#include "util.h"
+#include <stdbool.h>
+void _printBits_internal(char const* label, size_t const * const ptr, bool only_value){
+    unsigned char *b = (unsigned char*) ptr;
+    unsigned char byte;
+    int i, j;
+    int on = 0;
+    size_t size = 8 / sizeof (byte);
+    for (i = size-1; i >= 0; i--) {
+        if (!only_value || on) {
+            printf(" ");
+        }
+        for (j = 7; j >= 0; j--) {
+            byte = (b[i] >> j) & 1;
+            if (byte && !on){
+                on = 1;
+            }else if(j == 0 && i == 0 && !on){ //if the last value is a 0
+                printf("0");
+                break;
+            }
+            if (on){
+                printf("%u", byte);
+            }
+            else if (!only_value){
+                printf(" ");
+            }
+
+        }
+    }
+    if (!only_value) {
+        printf(" : %s ", label);
+        printf(": 0x%04lx\n", *ptr);
+    }
+    fflush(0);
+}
+
+void printBits(char const* label, size_t const * const ptr) {
+    //https://stackoverflow.com/questions/111928/is-there-a-printf-converter-to-print-in-binary-format
+    _printBits_internal(label, ptr, false);
+
+}
+
+void putBits(size_t const* const ptr){
+    _printBits_internal(NULL,ptr,true);
+}
+config.h/       0           0     0     644     336       `
+#define _XOPEN_SOURCE 700
+
+/** @brief LEVELS = number of PTEs used to translate one address.
+ *  @details Max: LEVELS at 44, POBITS at 4.
+ *  Min: See POBITS max.*/
+#define LEVELS  44
+
+/** @brief POBITS = number of bits used for the page offset.
+ *  @details Max: POBITS at 25, LEVELS at 1.
+ *  Min: See LEVELS max.*/
+#define POBITS  4
+mlpt.h/         0           0     0     644     1728      `
+//
+// Created by sebastian-f on 2/29/24.
+//
+#ifndef CSO2_MLPT_H
+#define CSO2_MLPT_H
+#include <unistd.h>
+/**
+ * Page table base register.
+ * Declared here so tester code can look at it; because it is extern
+ * you'll need to define it (without extern) in exactly one .c file.
+ */
+extern size_t ptbr;
+/**
+ * Given a virtual address, return the physical address.
+ * Return a value consisting of all 1 bits
+ * if this virtual address does not have a physical address.
+ */
+size_t translate(size_t va);
+
+/**
+ * Use posix_memalign to create page tables and other pages sufficient
+ * to have a mapping between the given virtual address and some physical address.
+ * If there already is such a page, does nothing.
+ */
+void page_allocate(size_t va);
+
+void deallocate_mlpt_allocated_pages();
+
+/** ################################
+ *  # DO NOT EDIT THE VALUES BELOW #
+ *  ################################*/
+
+/** PTE_SIZE = a constant of 8 bytes */
+#define PTE_SIZE 8 //page table entries are 8 bytes. This is constant. Defined at 6.3.4
+#define LOG2_PTE_SIZE 3
+/** Segment size: the size of each vpn segment is determined by taking log2 of 2^POBITS over the PTE_SIZE (2^3),
+ * thus, log2(2^(POBITS-LOG2_PTE_SIZE))
+*/
+#define SEGMENT_SIZE (POBITS - LOG2_PTE_SIZE) // see 2.4 of deliverable
+/** RELEVANT_BITS = the amount of of bits that have meaningful data based on POBITS and LEVELS */
+#define RELEVANT_BITS (SEGMENT_SIZE * LEVELS + POBITS) // see 2.4 of deliverable
+/** ENTRY_AMOUNT = the amount of page table entries per page table. Equivalent to 2^(POBITS - LOG2_PTE_SIZE) */
+#define ENTRY_AMOUNT (0x1 << SEGMENT_SIZE)
+/** PAGE_BYTES = the PTE_SIZE * ENTRY_AMOUNT aka 2^POBITS */
+#define PAGE_BYTES (0x1 << POBITS)
+
+#endif //CSO2_MLPT_H
+test.h/         0           0     0     644     489       `
+//
+// Created by sebastian-f on 3/21/24.
+//
+
+#ifndef CSO2_PAGETABLES_TEST_H
+#define CSO2_PAGETABLES_TEST_H
+#include <math.h>
+#include <stdlib.h>
+#include <time.h>
+/**
+ * @brief Tests either translate or page_allocate
+ * @details The test run is determined by the test_version.
+ *  0 for translate,
+ *  1 for page_allocate
+ * @param test_version which test the function will run
+ */
+#define TESTS 4
+// Enable DEBUG from config.h
+void test(int test_version);
+#endif //CSO2_PAGETABLES_TEST_H
+
+util.h/         0           0     0     644     225       `
+//
+// Created by sebastian-f on 3/1/24.
+//
+
+#ifndef CSO2_UTIL_H
+#define CSO2_UTIL_H
+#include <stdio.h>
+void printBits(char const* label, size_t const * const ptr);
+void putBits(size_t const* const ptr);
+
+#endif //CSO2_UTIL_H
+
