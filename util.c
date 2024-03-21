@@ -3,6 +3,9 @@
 //
 #include "util.h"
 #include <stdbool.h>
+#ifndef DEBUG
+#define DEBUG 0
+#endif
 void _printBits_internal(char const* label, size_t const * const ptr, bool only_value){
     unsigned char *b = (unsigned char*) ptr;
     unsigned char byte;

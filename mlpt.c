@@ -63,8 +63,8 @@ separated_va separate(size_t va){
         int shift =  (LEVELS - i - 1) * SEGMENT_SIZE;
         sep_va.vpn_segments[i] = (vpn >> shift) & segment_mask;
         if (DEBUG) {
-            char n[10];
-            snprintf(n, 10, "Segment %d", i);
+            char n[25];
+            snprintf(n, 25, "Segment %d", i);
             printBits(n, sep_va.vpn_segments + i);
         }
     }
