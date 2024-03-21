@@ -25,7 +25,7 @@ void setup_page_tables(size_t* page_tables[LEVELS]){
     }
 }
 
-size_t manually_allocate(size_t* page_tables[LEVELS], size_t * vpn_segments, const size_t PHYSICAL_ADDRESS, size_t offset){
+size_t manually_allocate(size_t* page_tables[LEVELS], size_t * vpn_segments, const size_t physical_address, size_t offset){
     if (*page_tables == 0){
         printf("Error: Page tables must be set up before allocating!");
         _exit(1);
@@ -50,8 +50,8 @@ size_t manually_allocate(size_t* page_tables[LEVELS], size_t * vpn_segments, con
         if (i + 1 < LEVELS) { //vpn to vpn
             page_tables[i][vpn_segments[i]] = (size_t) &page_tables[i + 1][0] + 0b1;
         }
-        else{ //physical address
-            page_tables[i][vpn_segments[i]] = (size_t) PHYSICAL_ADDRESS + 0b1; //we don't need to shift it pobits because it is aligned
+        else { //physical address
+            page_tables[i][vpn_segments[i]] = (size_t) physical_address + 0b1; //we don't need to shift it pobits because it is aligned
         }
         if (DEBUG) {
             char n[10];
@@ -60,8 +60,8 @@ size_t manually_allocate(size_t* page_tables[LEVELS], size_t * vpn_segments, con
         }
     }
     address += offset;
-    if(DEBUG) {
-        printBits("Offset", &offset);
+    if (DEBUG) {
+        printBits("offset", &offset);
     }
     return address;
 }
@@ -78,12 +78,12 @@ void test(int test_version) {
         if (DEBUG) {
             printf("Begin test %d\n", test);
         }
-        size_t PHYSICAL_ADDRESS = (random() % ENTRY_AMOUNT) << POBITS;
-        size_t OFFSET = random() % (size_t) pow(2, POBITS);
+        size_t physical_address = (random() % ENTRY_AMOUNT) << POBITS;
+        size_t offset = random() % (size_t) pow(2, POBITS);
         size_t address = 0;
-        if(test_version == 0) {
+        if (test_version == 0) {
             setup_page_tables(page_tables);
-            address = manually_allocate(page_tables, vpn_segments, PHYSICAL_ADDRESS, OFFSET);
+            address = manually_allocate(page_tables, vpn_segments, physical_address, offset);
             ptbr = (size_t) &page_tables[0][0];
         }
         else if (test_version == 1){
@@ -97,7 +97,7 @@ void test(int test_version) {
             for (int i = 0; i < LEVELS; i += 1) {
                 address += ((size_t) vpn_segments[i] << LEVEL(i));
             }
-            address += OFFSET;
+            address += offset;
         }
 
 
@@ -106,12 +106,12 @@ void test(int test_version) {
             printBits("Input", &address);
             printBits("Base register", &ptbr);
         }
-        if(test_version == 0){
+        if (test_version == 0){
             size_t out = translate(address);
             if (DEBUG) {
                 printBits("Output", &out);
             }
-            size_t actual_address = PHYSICAL_ADDRESS + OFFSET;
+            size_t actual_address = physical_address + offset;
             if (out == actual_address) {
                 successful_tests += 1;
             }
@@ -124,17 +124,18 @@ void test(int test_version) {
             for (int i = 0; i < LEVELS; i += 1) {
                 free(page_tables[i]);
             }
-        }else if(test_version == 1){
+        }
+        else if (test_version == 1){
             size_t out;
             out = translate(address);
-            if(out != (size_t) ~0){
+            if (out != (size_t) ~0){
                 printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
                 printBits("Instead of ~0, received address ", &out);
                 _exit(1);
             }
             page_allocate(address);
             out = translate(address);
-            if(out == (size_t) ~0){
+            if (out == (size_t) ~0){
                 printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
                 printBits("Received ~0 as output for address", &address);
                 _exit(1);

@@ -1,5 +1,5 @@
 
-//
+// This is a version of mlpt without the debug code for easier readability
 // Created by sebastian-f on 3/1/24.
 #include "config.h"
 #include "mlpt.h"
@@ -19,7 +19,8 @@ typedef struct allocated_pages_struct{
     void** stack;
     int stack_top;
     int stack_size;
-} allocated_pages_struct;
+}
+allocated_pages_struct;
 
 #define NULLPTR 0
 
@@ -34,16 +35,17 @@ void init_allocated_pages_struct(){
 typedef struct separated_va{
     size_t vpn_segments[LEVELS];
     size_t offset;
-} separated_va;
+}
+separated_va;
 
 separated_va separate(size_t va){
     separated_va sep_va;
-    va &= gen_mask(RELEVANT_BITS);
+    va &= gen_mask(RELEVANTBITS);
     size_t vpn = va >> POBITS;
     sep_va.offset = va & gen_mask(POBITS);
-    size_t segment_mask = gen_mask(SEGMENT_SIZE);
+    size_t segment_mask = gen_mask(SEGMENTSIZE);
     for (int i = 0; i < LEVELS; i += 1){
-        int shift =  (LEVELS - i - 1) * SEGMENT_SIZE;
+        int shift =  (LEVELS - i - 1) * SEGMENTSIZE;
         sep_va.vpn_segments[i] = (vpn >> shift) & segment_mask;
     }
     return sep_va;
@@ -68,8 +70,8 @@ size_t translate(size_t va) {
 }
 
 void allocate(void** mem_ptr){
-    posix_memalign(&(*mem_ptr), PAGE_BYTES, PAGE_BYTES);
-    memset(*mem_ptr, 0, PAGE_BYTES);
+    posix_memalign(&(*mem_ptr), PAGEBYTES, PAGEBYTES);
+    memset(*mem_ptr, 0, PAGEBYTES);
     if (allocated_pages.stack == 0){
         init_allocated_pages_struct();
         allocated_pages.stack = malloc(allocated_pages.stack_size * sizeof(size_t)); //setup stack memory

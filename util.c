@@ -20,7 +20,8 @@ void _printBits_internal(char const* label, size_t const * const ptr, bool only_
             byte = (b[i] >> j) & 1;
             if (byte && !on){
                 on = 1;
-            }else if(j == 0 && i == 0 && !on){ //if the last value is a 0
+            }
+            else if (j == 0 && i == 0 && !on){ //if the last value is a 0
                 printf("0");
                 break;
             }
