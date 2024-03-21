@@ -27,7 +27,8 @@ typedef struct allocated_pages_struct{
     void** stack;
     int stack_top;
     int stack_size;
-} allocated_pages_struct;
+}
+allocated_pages_struct;
 
 #define NULLPTR 0
 
@@ -42,7 +43,8 @@ void init_allocated_pages_struct(){
 typedef struct separated_va{
     size_t vpn_segments[LEVELS];
     size_t offset;
-} separated_va;
+}
+separated_va;
 
 separated_va separate(size_t va){
     if (DEBUG) {
@@ -118,7 +120,7 @@ void allocate(void** mem_ptr){
     if (allocated_pages.stack_top + 1 >= allocated_pages.stack_size){ //double the size of the stack
         allocated_pages.stack_size *= 2;
         void** tmp = realloc(allocated_pages.stack, allocated_pages.stack_size * sizeof(size_t));
-        if(tmp == 0){
+        if (tmp == 0){
             printf("Reallocation Error during ptr reallocation. Quitting");
             _exit(1);
         }
@@ -181,7 +183,7 @@ void page_allocate(size_t va){
 
 void deallocate_mlpt_allocated_pages(){
     if (allocated_pages.stack == 0){
-        if(DEBUG){
+        if (DEBUG){
             printf("Warning: deallocated nothing (no allocated pages detected");
         }
         return;
