@@ -11,7 +11,7 @@ libs: libmlpt.a
 clean:
 	rm -f *.o *.a *.gch mlpt test
 
-libmlpt.a: test.c util.c mlpt.c
+libmlpt.a: test.c util.c mlpt.c mlpt_txt.c
 	ar rcs $@ $^ $(HEADERS)
 
 test: main.o test.o util.o  mlpt.o
