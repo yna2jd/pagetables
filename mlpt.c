@@ -13,6 +13,8 @@
 #endif
 #ifndef DEBUG
 #define DEBUG 0
+#endif
+#if DEBUG == 0
 void printBits(char const* label, size_t const * const ptr);
 #endif
 size_t ptbr = 0;

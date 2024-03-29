@@ -10,6 +10,11 @@
 #ifndef DEBUG
 #define DEBUG 0
 #endif
+#if DEBUG == 0
+    void printBits(char const* label, size_t const * const ptr);
+#endif
+
+
 
 #define LEVEL(n) ((POBITS-3) * (LEVELS - n - 1) + POBITS)
 
@@ -117,8 +122,10 @@ void test(int test_version) {
             }
             else {
                 printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
-                printBits("received address: ", &out);
-                printBits("expected address: ", &actual_address);
+                if (DEBUG) {
+                    printBits("received address: ", &out);
+                    printBits("expected address: ", &actual_address);
+                }
                 _exit(1);
             }
             for (int i = 0; i < LEVELS; i += 1) {
@@ -130,14 +137,18 @@ void test(int test_version) {
             out = translate(address);
             if (out != (size_t) ~0){
                 printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
-                printBits("Instead of ~0, received address ", &out);
+                if (DEBUG) {
+                    printBits("Instead of ~0, received address ", &out);
+                }
                 _exit(1);
             }
             page_allocate(address);
             out = translate(address);
             if (out == (size_t) ~0){
                 printf("%d/%d passed\n------FAILED------\n", successful_tests, TESTS);
-                printBits("Received ~0 as output for address", &address);
+                if (DEBUG) {
+                    printBits("Received ~0 as output for address", &address);
+                }
                 _exit(1);
             }
             if (DEBUG) {
