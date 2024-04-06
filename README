@@ -1,0 +1,39 @@
+1. config.h
+
+    When attempting to customize the operation of the page table program library libmlpt.a, you can edit pagetable constants in config.h: LEVELS and POBITS. 
+    To apply your changes, it is required that you remake the project with the provided Makefile and source.
+    The second config value, POBITS, affects how large each page table is in bytes, POBITS stands for Page Offset Bits.
+
+    a.  LEVELS explanation
+        The amount of levels of page tables the system has is equal to LEVELS.
+        Page table levels allow for better memory management by dividing up large portions of memory into smaller pieces that can be set on command.
+        The more levels, the greater the space savings, but the longer the program takes in accessing the memory
+
+    b.  LEVELS recommendation
+        As LEVELS affect the performance of accessing memory, even if only at first, it is recommended that the LEVELS value be kept low.
+        LEVELS must be a whole number. The minimum acceptable value is 1, which represents and single table of data, and the maximum is 44.
+        This maximum is due to the address being unable to extend beyond 48 bits in length.
+	In x86-64 systems, the LEVELS value is generally 3 or 4, depending on the mode. It is recommended that LEVELS be kept in that region.
+
+    c.  POBITS explanation
+        The size of the page table in bytes is equal to 2^POBITS. For example, with POBITS being 4, there would be 16 bytes per page table.
+        Something to note is that page table entries, whether data or otherwise, are 8 bytes. This constant cannot be modified.
+        Thus, with POBITS being 4, at 16 bytes per page, each page table would have two entries.
+
+    d.  POBITS recommendation
+        Due to the fact that page table entries are 8 bytes, it is necessary to keep POBITS as a whole number and be at 3 or above. Due to the address size being capped at 48,
+        the largest value POBITS can safely be is 25. Any larger and there is a chance that the virtual page number could be cut off.
+        The computer architecture of x86 uses either 4096 byte pages or 2097152 byte page tables, which have POBITS of 12 and 21 respectively.
+        Thus, the recommendation is to maintain the POBITS value within that range.
+
+2.  Limitations
+
+    No additional limitations are known.
+
+3.  Utilizing the deallocation interface
+
+    The deallocation interface works by storing every pointer to a page as it is allocated in a global stack.
+    The stack maintains its own bookkeeping, and grows as needed to accomidate. When it is time to deallocate, each member of the stack, and the stack itself, 
+    are freed using the free command. Thus, there are no allocations made by the library once the function is called.
+    The stack is resilient and allows for ans many uses as are required. Simply call deallocate_mlpt_allocated_pages when the pages need to be deallocated.
+    All page_allocate'd pages will be deallocated. No arguments need to be passed in.

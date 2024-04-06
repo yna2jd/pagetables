@@ -1,0 +1,14 @@
+README:
+https://www.intel.com/content/www/us/en/content-details/782158/intel-64-and-ia-32-architectures-software-developer-s-manual-combined-volumes-1-2a-2b-2c-2d-3a-3b-3c-3d-and-4.html
+
+mlpt.c:
+https://stackoverflow.com/questions/12416639/how-to-create-a-mask-with-the-least-significant-bits-set-to-1-in-c
+https://www.cs.virginia.edu/~cr4bd/3130/S2024/labhw/pagetable.html
+
+Makefile
+https://medium.com/@eightlimbed/how-to-create-and-use-a-c-static-library-eec33d502aeb
+
+Licenses.txt
+https://creativecommons.org/public-domain/cc0/
+https://debricked.com/blog/open-source-license-families-compliance/
+https://www.tldrlegal.com/license/mit-license

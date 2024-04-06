@@ -1,0 +1,16 @@
+1. The GNU Public License v3. The GPL, as it is known, provides strong protection for software released under it.
+Its comprehensive language provides patent protection, prevents resale of the software itself, and removes a problematic violation clause of GPL v2.
+However, should you release software under the license, you must be prepared to provide anyone with the source code of your software.
+Additionally, any software that uses or modifies the work would inherit the license, which protects it further.
+It is the strong and comprehensive protections of the GPLv3 that encouraged me to include it in the project.
+
+2. The MIT License is much more permissive than the GPL. With it anyone can sell, distribute, include and otherwise use your software.
+The license's inclusion of commercial use means that technically someone could sell a wrapper to your free software and people would be none the wiser.
+However, there's also no question that the license is short and sweet. It is flexible, quick to understand and limits restrictions.
+So, if you're making open source software, it minimizes the headache of worrying about licensing.
+
+3. The CC0 license is a copyright relinquishing license.
+Making your work effectively public domain, the CC0 license means that you hold no trademark or limitation to it.
+While one might expect that this license would be short, it is in one of the longest, using its "three-tier" system to limit legal repercussion.
+Thus, complete with a Waiver and Public License fallback, the CC0 license is a great option for sending your creation free into the world,
+should that be your desire. Personally, I like my name associated with my work, which is why I elected against this one.
