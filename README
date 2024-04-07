@@ -1,8 +1,8 @@
 1. config.h
-	When attempting to customize the operation of the page table program library libmlpt.a, you can edit pagetable 	 
-        constants in config.h: LEVELS and POBITS. To apply your changes, it is required that you remake the project with the 
-        provided Makefile and source. The second config value, POBITS, affects how large each page table is in bytes, POBITS 
-        stands for Page Offset Bits.
+    When attempting to customize the operation of the page table program library libmlpt.a, you can edit pagetable 
+    constants in config.h: LEVELS and POBITS. To apply your changes, it is required that you remake the project with the 
+    provided Makefile and source. The second config value, POBITS, affects how large each page table is in bytes, POBITS 
+    stands for Page Offset Bits.
 
     a.  LEVELS explanation
 	The amount of levels of page tables the system has is equal to LEVELS. Page table levels allow for better memory 
